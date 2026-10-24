@@ -1,0 +1,593 @@
+<!DOCTYPE html> <!-- 指定使用 HTML5 文件標準 -->
+<html lang="zh-Hant"> <!-- 設定頁面語言為繁體中文 -->
+<head> <!-- 開始設定文件資訊與樣式 -->
+	<meta charset="UTF-8"> <!-- 使用 UTF-8 正確顯示繁體中文 -->
+	<meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- 讓版面配合手機寬度顯示 -->
+	<meta name="theme-color" content="#f3f6f1"> <!-- 設定行動瀏覽器工具列的主題色 -->
+	<link rel="preconnect" href="https://fonts.googleapis.com"> <!-- 提前連線至 Google Fonts 字型樣式服務 -->
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin> <!-- 提前連線至 Google Fonts 字型檔服務 -->
+	<link href="https://fonts.googleapis.com/css2?family=Chiron+GoRound+TC:wght@200..900&family=Zen+Maru+Gothic:wght@300;400;500;700;900&display=swap" rel="stylesheet"> <!-- 載入指定範圍的內文字體與五種標題字體字重 -->
+	<title>小組計時器</title> <!-- 設定瀏覽器分頁標題 -->
+	<style> /* 開始撰寫不需外部套件的頁面樣式 */
+		:root { /* 集中管理頁面的色彩與共用尺寸 */
+			color-scheme: light; /* 指定使用明亮色彩介面 */
+			--canvas: #f3f6f1; /* 設定使用者指定的淡綠背景色 */
+			--ink: #172b2a; /* 設定主要文字的深墨綠色 */
+			--muted: #687774; /* 設定輔助文字的灰綠色 */
+			--line: #d8e1da; /* 設定輸入框與分隔線顏色 */
+			--green: #2e7967; /* 設定主要操作按鈕的綠色 */
+			--coral: #d84f43; /* 設定倒數最後十秒的警示紅色 */
+			--ring-size: min(72vw, 540px); /* 依畫面寬度限制大型圓環尺寸 */
+			font-family: "Chiron GoRound TC", sans-serif; /* 將整頁文字設定為指定的圓體 */
+			font-optical-sizing: auto; /* 依字體大小自動調整字形光學尺寸 */
+			font-synthesis: none; /* 避免瀏覽器自行合成粗體或斜體 */
+			text-rendering: optimizeLegibility; /* 優先改善文字的可讀性 */
+		} /* 結束共用變數設定 */
+		* { box-sizing: border-box; } /* 讓尺寸計算包含內距與邊框 */
+		html, body { min-width: 320px; min-height: 100%; margin: 0; } /* 移除頁面邊界並支援小螢幕 */
+		body { color: var(--ink); background-color: var(--canvas); background-image: radial-gradient(#dfe8df 0.8px, transparent 0.8px); background-size: 18px 18px; } /* 設定文字色與使用者指定的點狀背景 */
+		button, input { font: inherit; } /* 讓按鈕與輸入框沿用頁面字體 */
+		button { color: inherit; } /* 讓按鈕文字沿用主要文字顏色 */
+		.app { min-height: 100svh; display: flex; flex-direction: column; } /* 建立至少填滿視窗高度的應用程式版面 */
+		.topbar { width: min(1280px, 100%); margin: 0 auto; padding: 26px clamp(20px, 5vw, 64px); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgb(23 43 42 / 10%); } /* 以細分隔線建立簡潔頁首 */
+		.brand { display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 750; letter-spacing: 0; } /* 設定品牌名稱的字重與排列 */
+		.brand-mark { width: 102px; height: 102px; display: grid; place-items: center; } /* 預留放大一點五倍後的標題圖示空間 */
+		.brand-mark img { width: 102px; height: 102px; object-fit: contain; transform: translateX(+20px); } /* 放大計時器插畫並向左移四像素 */
+		.top-note { color: var(--muted); font-size: 13px; } /* 降低頁首輔助文字的視覺權重 */
+		main { width: min(1280px, 100%); flex: 1; margin: 0 auto; padding: clamp(32px, 6vh, 64px) clamp(20px, 5vw, 64px); display: grid; grid-template-columns: minmax(270px, 0.74fr) minmax(0, 1.5fr); align-items: center; gap: clamp(36px, 7vw, 96px); } /* 建立設定區與大型計時顯示區 */
+		.tab-bar { width: min(1280px, 100%); margin: 0 auto; padding: 14px clamp(20px, 5vw, 64px) 0; display: flex; gap: 8px; border-bottom: 1px solid var(--line); } /* 在頁首下方建立計時模式分頁列 */
+		.tab-button { min-height: 46px; padding: 0 16px; border: 0; border-bottom: 3px solid transparent; color: var(--muted); background: transparent; font-size: 15px; font-weight: 700; cursor: pointer; } /* 設定可清楚辨識的分頁按鈕 */
+		.tab-button[aria-selected="true"] { border-bottom-color: var(--green); color: var(--ink); } /* 標示目前選取的計時模式 */
+		.tab-panel[hidden] { display: none; } /* 切換分頁時隱藏非作用中的內容 */
+		.stopwatch-panel { display: block; } /* 讓碼表分頁以卡片版面呈現 */
+		.stopwatch-toolbar { margin-bottom: 30px; display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; } /* 將碼表標題與全部控制按鈕並排 */
+		.stopwatch-title .eyebrow { margin-bottom: 10px; } /* 縮短碼表分類文字與標題之間的距離 */
+		.stopwatch-description { margin: 10px 0 0; color: var(--muted); font-size: 15px; } /* 顯示碼表頁面的簡短說明 */
+		.stopwatch-actions { display: flex; flex-shrink: 0; gap: 10px; } /* 將全部開始與重置按鈕並排 */
+		.stopwatch-actions button { min-height: 54px; padding: 0 20px; border-radius: 8px; font-size: 15px; font-weight: 750; cursor: pointer; } /* 統一全部控制按鈕的點擊尺寸 */
+		.reset-all-button { border: 1px solid var(--line); background: rgb(255 255 255 / 70%); } /* 使用次要按鈕樣式顯示全部重置 */
+		.reset-all-button:hover { border-color: var(--ink); background: #fff; } /* 提示全部重置按鈕可操作 */
+		.stopwatch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; } /* 依可用空間排列五組碼表卡片 */
+		.stopwatch-card { min-width: 0; padding: 20px; display: grid; gap: 22px; border: 1px solid var(--line); border-radius: 8px; background: rgb(255 255 255 / 72%); } /* 建立每組獨立碼表的清楚卡片 */
+		.stopwatch-card h2 { margin: 0 0 12px; font-size: 20px; font-weight: 750; } /* 標示各小組名稱 */
+		.stopwatch-clock { position: relative; width: 180px; max-width: 100%; margin: 0 auto; aspect-ratio: 1; display: grid; place-items: center; } /* 建立各組碼表的正圓進度顯示區 */
+		.stopwatch-progress-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); } /* 將碼表圓環進度起點移至正上方 */
+		.stopwatch-ring-track, .stopwatch-progress { fill: none; stroke-width: 8; } /* 設定碼表圓環底軌與進度線 */
+		.stopwatch-ring-track { stroke: #f3f6f1; } /* 使用指定的背景色顯示尚未開始的圓環 */
+		.stopwatch-progress { stroke: url(#ringGradient); stroke-linecap: round; transition: stroke-dashoffset 180ms linear; } /* 以漸層描邊呈現每分鐘累積進度 */
+		.stopwatch-progress-head { transition: cx 100ms linear, cy 100ms linear, fill 180ms ease; } /* 平順移動前端標記並切換圈數顏色 */
+		.stopwatch-time { position: relative; margin: 0; font-size: 40px; font-weight: 650; line-height: 1; font-variant-numeric: tabular-nums; } /* 將大尺寸等寬碼表時間置於圓心 */
+		.stopwatch-toggle { width: 100%; } /* 讓單組開始與暫停按鈕填滿卡片寬度 */
+		.controls { width: 100%; max-width: 380px; } /* 限制控制欄寬度以方便掃讀 */
+		.eyebrow { margin: 0 0 12px; color: var(--green); font-size: 12px; font-weight: 800; letter-spacing: 1.4px; } /* 標示課堂計時的小型分類文字 */
+		h1 { margin: 0; font-family: "Zen Maru Gothic", sans-serif; font-size: clamp(32px, 4vw, 48px); font-weight: 900; line-height: 1.15; letter-spacing: 0; } /* 使用九百字重的指定字體顯示頁面標題 */
+		.description { margin: 12px 0 34px; color: var(--muted); font-size: 15px; line-height: 1.7; } /* 提供精簡的課堂情境說明 */
+		.field-label { display: block; margin-bottom: 10px; font-size: 13px; font-weight: 700; } /* 將輸入欄位標籤放在輸入框上方 */
+		.time-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } /* 並排顯示分鐘與秒數輸入框 */
+		.field { min-width: 0; } /* 允許輸入欄位在窄畫面中縮小 */
+		.input-wrap { height: 58px; padding: 0 15px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 8px; background: rgb(255 255 255 / 76%); transition: border-color 160ms ease, box-shadow 160ms ease; } /* 建立清楚且易操作的時間輸入框 */
+		.input-wrap:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px rgb(46 121 103 / 13%); } /* 使用鍵盤輸入時顯示明確焦點 */
+		.input-wrap input { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 24px; font-weight: 750; font-variant-numeric: tabular-nums; } /* 讓數字輸入易讀並使用等寬數字 */
+		.input-wrap input::-webkit-inner-spin-button, .input-wrap input::-webkit-outer-spin-button { margin: 0; appearance: none; } /* 隱藏瀏覽器預設的數字微調按鈕 */
+		.unit { color: var(--muted); font-size: 13px; white-space: nowrap; } /* 標示分鐘與秒數單位 */
+		.quick-heading { margin: 25px 0 11px; font-size: 13px; font-weight: 700; } /* 設定快速時間選項標題 */
+		.presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } /* 將六個快速按鈕排成三欄 */
+		.preset { min-height: 42px; border: 1px solid var(--line); border-radius: 7px; background: rgb(255 255 255 / 58%); font-size: 13px; font-weight: 650; cursor: pointer; transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease; } /* 設定低干擾的快速選擇按鈕 */
+		.preset:hover { transform: translateY(-1px); border-color: var(--green); color: var(--green); background: #fff; } /* 滑過快速按鈕時回饋可互動狀態 */
+		.preset[aria-pressed="true"] { border-color: var(--green); color: var(--green); background: #e7f0eb; } /* 標示目前選中的快速時間 */
+		.actions { margin-top: 25px; display: grid; grid-template-columns: 1fr 52px 52px; gap: 10px; } /* 將開始、重設與全螢幕按鈕並排 */
+		.start-button, .reset-button, .fullscreen-button { min-height: 54px; display: grid; place-items: center; border-radius: 8px; cursor: pointer; transition: background 150ms ease, transform 150ms ease, border-color 150ms ease; } /* 設定一致且容易點擊的操作按鈕尺寸 */
+		.start-button { border: 1px solid var(--green); color: #fff; background: var(--green); font-size: 15px; font-weight: 750; } /* 讓開始與暫停按鈕成為主要操作 */
+		.start-button:hover { transform: translateY(-1px); background: #256554; } /* 滑過主要操作時稍微加深 */
+		.reset-button, .fullscreen-button { border: 1px solid var(--line); background: rgb(255 255 255 / 65%); } /* 讓次要圖示按鈕清楚但不搶焦點 */
+		.reset-button:hover, .fullscreen-button:hover { border-color: var(--ink); background: #fff; } /* 提示次要圖示按鈕可操作 */
+		.reset-button svg, .fullscreen-button svg { width: 19px; height: 19px; } /* 限制次要按鈕圖示尺寸 */
+		.fullscreen-exit-icon { display: none; } /* 預設隱藏離開全螢幕圖示 */
+		.fullscreen-button[aria-pressed="true"] .fullscreen-enter-icon { display: none; } /* 全螢幕時隱藏進入全螢幕圖示 */
+		.fullscreen-button[aria-pressed="true"] .fullscreen-exit-icon { display: block; } /* 全螢幕時顯示離開全螢幕圖示 */
+		button:focus-visible { outline: 3px solid rgb(46 121 103 / 36%); outline-offset: 3px; } /* 為鍵盤操作提供清楚的按鈕焦點 */
+		button:disabled, input:disabled { cursor: not-allowed; opacity: 0.58; } /* 讓倒數期間鎖定的設定呈現不可操作狀態 */
+		.timer-panel { min-width: 0; display: grid; justify-items: center; } /* 將倒數圓環與文字置中顯示 */
+		.timer-shell { position: relative; width: var(--ring-size); max-width: 100%; aspect-ratio: 1; display: grid; place-items: center; } /* 保持圓環為正圓並避免超出容器 */
+		.progress-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; transform: rotate(-90deg); } /* 將 SVG 進度起點移到圓環頂端 */
+		.ring-track, .ring-progress { fill: none; stroke-width: 13; } /* 設定圓環底軌與進度線的基本樣式 */
+		.ring-track { stroke: #dce6df; } /* 使用淡綠灰色顯示完整圓環底軌 */
+		.ring-progress { stroke: url(#ringGradient); stroke-linecap: round; transition: stroke-dashoffset 450ms linear, stroke 200ms ease; } /* 使用漸層圓環並平順更新倒數進度 */
+		.timer-center { position: relative; z-index: 1; display: grid; justify-items: center; text-align: center; } /* 將時間與標籤固定於圓環中央 */
+		.time-display { margin: 0; font-size: clamp(76px, 12vw, 144px); font-weight: 750; line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; } /* 使用超大等寬數字方便投影辨讀 */
+		.time-caption { margin-top: 17px; color: var(--muted); font-size: 30px; line-height: 1.2; } /* 以約三十像素顯示圓環內的狀態提示 */
+		.timer-panel.is-urgent .time-display, .timer-panel.is-urgent .time-caption { color: var(--coral); } /* 最後十秒將數字與提示轉為紅色 */
+		.timer-panel.is-urgent .ring-progress { stroke: var(--coral); } /* 最後十秒將圓環進度轉為紅色 */
+		.timer-panel.is-urgent .ring-track { stroke: #f0d7d2; } /* 最後十秒同步調整底軌的警示色 */
+		.timer-panel.is-urgent .time-display, .timer-panel.is-urgent .ring-progress { animation: urgent-pulse 700ms ease-in-out infinite alternate; } /* 讓警示數字與圓環進度同步閃爍 */
+		.timer-panel.is-finished .time-display, .timer-panel.is-finished .time-caption { color: var(--coral); } /* 時間結束後保持紅色提醒 */
+		.timer-panel.is-finished .ring-progress { stroke: var(--coral); } /* 時間結束後讓圓環呈現警示色 */
+		html.timer-finished-flash { animation: finished-flash 250ms steps(2, start) 20; } /* 時間結束時將全畫面反色閃爍五秒 */
+		@keyframes urgent-pulse { from { opacity: 1; } to { opacity: 0.35; } } /* 定義最後十秒柔和的閃爍動畫 */
+		@keyframes finished-flash { to { filter: invert(1); } } /* 定義交替反轉全畫面色彩的動畫 */
+		@media (min-width: 1100px) { /* 大螢幕時讓計時數字維持足夠大的投影尺寸 */
+			.time-display { font-size: clamp(120px, 11vw, 164px); } /* 加大寬螢幕中央的倒數數字 */
+		} /* 結束大螢幕樣式 */
+		@media (max-width: 760px) { /* 手機與窄螢幕改為設定在上、計時器在下 */
+			:root { --ring-size: min(84vw, 450px); } /* 在手機上使用更大的可用圓環寬度 */
+			.topbar { padding-top: 18px; padding-bottom: 18px; } /* 縮小手機頁首的上下留白 */
+			.top-note { font-size: 12px; } /* 讓手機上的頁首提示保持精簡 */
+			.tab-bar { padding-top: 8px; } /* 縮小手機版分頁列的上方留白 */
+			main { grid-template-columns: minmax(0, 1fr); gap: 38px; padding-top: 34px; padding-bottom: 36px; } /* 將設定區與圓環改為直向排列 */
+			.controls { max-width: 460px; margin: 0 auto; } /* 讓手機設定欄置中並保持好讀寬度 */
+			.description { margin-bottom: 25px; } /* 減少手機設定區內的垂直空間 */
+			.timer-panel { width: 100%; } /* 讓圓環在手機上使用完整容器寬度 */
+			.time-display { font-size: clamp(78px, 22vw, 132px); } /* 讓手機大字隨螢幕寬度縮放 */
+			.stopwatch-toolbar { align-items: stretch; flex-direction: column; gap: 20px; } /* 將手機版碼表操作改為直向排列 */
+			.stopwatch-actions { width: 100%; } /* 讓全部控制按鈕填滿手機版工具列 */
+			.stopwatch-actions button { flex: 1; padding: 0 12px; } /* 平分手機版全部控制按鈕寬度 */
+		} /* 結束手機版樣式 */
+		@media (prefers-reduced-motion: reduce) { /* 尊重使用者關閉動畫的系統偏好 */
+			*, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } /* 將動畫與轉場縮至幾乎不動 */
+			html.timer-finished-flash { animation: none !important; } /* 尊重減少動態效果偏好並停用畫面閃爍 */
+		} /* 結束減少動態效果設定 */
+	</style> <!-- 結束頁面樣式 -->
+</head> <!-- 結束文件資訊設定 -->
+<body> <!-- 開始顯示頁面內容 -->
+	<div class="app"> <!-- 建立完整的應用程式外框 -->
+		<header class="topbar"> <!-- 顯示頁面品牌與課堂提示 -->
+			<div class="brand"> <!-- 將圖示與產品名稱組合在一起 -->
+				<span class="brand-mark" aria-hidden="true"> <!-- 顯示不需螢幕閱讀器朗讀的品牌圖示底色 -->
+					<img src="libraries/計時器.png" alt=""> <!-- 使用 libraries 資料夾中的計時器插畫 -->
+				</span> <!-- 結束品牌圖示底色 -->
+				<span>小組計時器</span> <!-- 顯示頁面名稱 -->
+			</div> <!-- 結束品牌區 -->
+			<span class="top-note">GROUP SESSION TIMER</span> <!-- 顯示適合課堂使用的英文提示 -->
+		</header> <!-- 結束頁首 -->
+		<nav class="tab-bar" role="tablist" aria-label="計時模式"> <!-- 提供倒數計時與小組碼表分頁 -->
+			<button id="countdownTab" class="tab-button" type="button" role="tab" aria-controls="countdownPanel" aria-selected="true" tabindex="0">倒數計時</button> <!-- 切換至既有倒數計時器 -->
+			<button id="stopwatchTab" class="tab-button" type="button" role="tab" aria-controls="stopwatchPanel" aria-selected="false" tabindex="-1">小組碼表</button> <!-- 切換至五組獨立碼表 -->
+		</nav> <!-- 結束計時模式分頁列 -->
+		<main id="countdownPanel" class="tab-panel" role="tabpanel" aria-labelledby="countdownTab"> <!-- 開始既有倒數設定與計時內容 -->
+			<section class="controls" aria-labelledby="page-title"> <!-- 建立時間設定與操作區 -->
+				<p class="eyebrow">CLASSROOM TOOL</p> <!-- 顯示小型課堂工具分類 -->
+				<h1 id="page-title">掌握討論時間</h1> <!-- 顯示主要頁面標題 -->
+	
+				<label class="field-label" for="minutes">設定時間</label> <!-- 為時間輸入欄提供可存取標籤 -->
+				<div class="time-fields"> <!-- 並排放置分鐘與秒數欄位 -->
+					<div class="field"> <!-- 建立分鐘輸入欄位容器 -->
+						<div class="input-wrap"> <!-- 建立分鐘輸入框的視覺外觀 -->
+							<input id="minutes" type="number" min="0" max="999" value="5" inputmode="numeric" aria-label="分鐘"/> <!-- 輸入 0 到 999 分鐘 -->
+							<span class="unit">分鐘</span> <!-- 標示分鐘欄位單位 -->
+						</div> <!-- 結束分鐘輸入框外觀 -->
+					</div> <!-- 結束分鐘輸入欄位容器 -->
+					<div class="field"> <!-- 建立秒數輸入欄位容器 -->
+						<div class="input-wrap"> <!-- 建立秒數輸入框的視覺外觀 -->
+							<input id="seconds" type="number" min="0" max="59" value="0" inputmode="numeric" aria-label="秒數"/> <!-- 輸入 0 到 59 秒 -->
+							<span class="unit">秒</span> <!-- 標示秒數欄位單位 -->
+						</div> <!-- 結束秒數輸入框外觀 -->
+					</div> <!-- 結束秒數輸入欄位容器 -->
+				</div> <!-- 結束時間輸入欄位列 -->
+				<p class="quick-heading">快速設定</p> <!-- 標示常用時間選項 -->
+				<div class="presets" role="group" aria-label="快速設定時間"> <!-- 將快速時間按鈕組成可辨識群組 -->
+					<button class="preset" type="button" data-minutes="1" aria-pressed="false">1 分鐘</button> <!-- 快速設定一分鐘 -->
+					<button class="preset" type="button" data-minutes="3" aria-pressed="false">3 分鐘</button> <!-- 快速設定三分鐘 -->
+					<button class="preset" type="button" data-minutes="5" aria-pressed="true">5 分鐘</button> <!-- 快速設定五分鐘 -->
+					<button class="preset" type="button" data-minutes="10" aria-pressed="false">10 分鐘</button> <!-- 快速設定十分鐘 -->
+					<button class="preset" type="button" data-minutes="15" aria-pressed="false">15 分鐘</button> <!-- 快速設定十五分鐘 -->
+					<button class="preset" type="button" data-minutes="20" aria-pressed="false">20 分鐘</button> <!-- 快速設定二十分鐘 -->
+				</div> <!-- 結束快速時間選項群組 -->
+				<div class="actions"> <!-- 放置開始、暫停與重設操作 -->
+					<button id="startButton" class="start-button" type="button">開始</button> <!-- 開始倒數或在倒數中暫停 -->
+					<button id="resetButton" class="reset-button" type="button" aria-label="重設計時器" title="重設計時器"> <!-- 提供清楚標籤的重設按鈕 -->
+						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"> <!-- 使用內嵌 SVG 繪製重設圖示 -->
+							<path d="M4 12a8 8 0 1 0 2.35-5.65L4 8.7M4 4v4.7h4.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/> <!-- 畫出環形重設箭頭 -->
+						</svg> <!-- 結束重設圖示 -->
+					</button> <!-- 結束重設按鈕 -->
+					<button id="fullscreenButton" class="fullscreen-button" type="button" aria-label="進入全螢幕" title="進入全螢幕" aria-pressed="false"> <!-- 提供進入與離開全螢幕的控制按鈕 -->
+						<svg class="fullscreen-enter-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"> <!-- 繪製進入全螢幕圖示 -->
+							<path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/> <!-- 畫出四角向外延伸的符號 -->
+						</svg> <!-- 結束進入全螢幕圖示 -->
+						<svg class="fullscreen-exit-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"> <!-- 繪製離開全螢幕圖示 -->
+							<path d="M8 3v5H3m13-5v5h5M3 16h5v5m13-5h-5v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/> <!-- 畫出四角向內收回的符號 -->
+						</svg> <!-- 結束離開全螢幕圖示 -->
+					</button> <!-- 結束全螢幕按鈕 -->
+				</div> <!-- 結束操作按鈕列 -->
+			</section> <!-- 結束時間設定與操作區 -->
+			<section id="timerPanel" class="timer-panel" aria-label="小組倒數計時器"> <!-- 建立倒數圓環與時間顯示區 -->
+				<div class="timer-shell"> <!-- 建立正圓倒數顯示與 SVG 容器 -->
+					<svg class="progress-ring" viewBox="0 0 340 340" role="img" aria-label="剩餘時間圓環進度"> <!-- 使用 SVG 呈現剩餘時間圓環 -->
+						<defs> <!-- 定義圓環使用的漸層色彩 -->
+							<linearGradient id="ringGradient" x1="0%" y1="100%" x2="100%" y2="0%"> <!-- 設定從左下到右上的漸層方向 -->
+								<stop offset="0%" stop-color="#6aa586"/> <!-- 設定漸層起點為柔和薄荷綠 -->
+								<stop offset="52%" stop-color="#3d927a"/> <!-- 設定漸層中段為清新的綠色 -->
+								<stop offset="100%" stop-color="#245d55"/> <!-- 設定漸層終點為深青綠 -->
+							</linearGradient> <!-- 結束圓環漸層定義 -->
+						</defs> <!-- 結束 SVG 漸層設定 -->
+						<circle class="ring-track" cx="170" cy="170" r="153"/> <!-- 畫出完整圓環底軌 -->
+						<circle id="progressRing" class="ring-progress" cx="170" cy="170" r="153"/> <!-- 畫出會隨倒數縮短的彩色進度環 -->
+					</svg> <!-- 結束圓環 SVG -->
+					<div class="timer-center"> <!-- 將倒數數字放在圓環正中央 -->
+						<p id="timeDisplay" class="time-display" role="timer" aria-live="off">05:00</p> <!-- 顯示大尺寸 MM:SS 倒數數字 -->
+						<span id="timeCaption" class="time-caption">等待開始</span> <!-- 顯示計時器目前的輔助狀態 -->
+					</div> <!-- 結束圓環中央內容 -->
+				</div> <!-- 結束倒數圓環容器 -->
+			</section> <!-- 結束倒數計時器顯示區 -->
+		</main> <!-- 結束頁面主要內容 -->
+		<main id="stopwatchPanel" class="tab-panel stopwatch-panel" role="tabpanel" aria-labelledby="stopwatchTab" hidden> <!-- 開始小組碼表分頁內容 -->
+			<div class="stopwatch-toolbar"> <!-- 放置碼表標題與全部控制按鈕 -->
+				<div class="stopwatch-title"> <!-- 顯示碼表頁面標題與簡短說明 -->
+					<p class="eyebrow">GROUP STOPWATCH</p> <!-- 標示小組碼表工具分類 -->
+					<h1>小組碼表</h1> <!-- 顯示碼表分頁標題 -->
+				</div> <!-- 結束碼表標題區 -->
+				<div class="stopwatch-actions"> <!-- 放置全部開始／暫停與全部重置 -->
+					<button id="allStopwatchesButton" class="start-button" type="button">全部開始</button> <!-- 同時開始或暫停所有小組碼表 -->
+					<button id="resetAllStopwatchesButton" class="reset-all-button" type="button">全部重置</button> <!-- 將五組碼表全部歸零 -->
+				</div> <!-- 結束全部控制按鈕 -->
+			</div> <!-- 結束碼表工具列 -->
+			<div id="stopwatchGrid" class="stopwatch-grid"> <!-- 排列五張小組碼表卡片 -->
+				<article class="stopwatch-card" data-group-id="1" data-group-color="#c1121f"> <!-- 建立第一組紅色碼表卡片 -->
+					<div><h2>第一組</h2><div class="stopwatch-clock"> <!-- 放置第一組的專屬碼表圓環 -->
+						<svg class="stopwatch-progress-ring" viewBox="0 0 180 180" aria-hidden="true"> <!-- 繪製第一組的 SVG 圓環 -->
+							<defs><linearGradient id="stopwatchGradient1" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#f3f6f1"/><stop offset="100%" stop-color="#c1121f"/></linearGradient></defs> <!-- 定義由背景色漸變至第一組紅色的圓環 -->
+							<circle class="stopwatch-ring-track" cx="90" cy="90" r="78"/> <!-- 顯示第一組尚未填滿的圓環底軌 -->
+							<circle class="stopwatch-progress" style="stroke:url(#stopwatchGradient1)" cx="90" cy="90" r="78"/> <!-- 顯示第一組紅色漸層進度 -->
+							<circle class="stopwatch-progress-head" cx="90" cy="12" r="5" fill="#c1121f" opacity="0"/> <!-- 標示第一組目前圈數的圓環前端 -->
+						</svg> <!-- 結束第一組 SVG 圓環 -->
+						<p class="stopwatch-time">00:00</p> <!-- 顯示第一組碼表時間 -->
+					</div></div> <!-- 結束第一組名稱與圓環 -->
+					<button class="start-button stopwatch-toggle" type="button" data-group-id="1" aria-pressed="false">開始</button> <!-- 單獨開始或暫停第一組碼表 -->
+				</article> <!-- 結束第一組碼表卡片 -->
+				<article class="stopwatch-card" data-group-id="2" data-group-color="#fb8b24"> <!-- 建立第二組橘色碼表卡片 -->
+					<div><h2>第二組</h2><div class="stopwatch-clock"> <!-- 放置第二組的專屬碼表圓環 -->
+						<svg class="stopwatch-progress-ring" viewBox="0 0 180 180" aria-hidden="true"> <!-- 繪製第二組的 SVG 圓環 -->
+							<defs><linearGradient id="stopwatchGradient2" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#f3f6f1"/><stop offset="100%" stop-color="#fb8b24"/></linearGradient></defs> <!-- 定義由背景色漸變至第二組橘色的圓環 -->
+							<circle class="stopwatch-ring-track" cx="90" cy="90" r="78"/> <!-- 顯示第二組尚未填滿的圓環底軌 -->
+							<circle class="stopwatch-progress" style="stroke:url(#stopwatchGradient2)" cx="90" cy="90" r="78"/> <!-- 顯示第二組橘色漸層進度 -->
+							<circle class="stopwatch-progress-head" cx="90" cy="12" r="5" fill="#fb8b24" opacity="0"/> <!-- 標示第二組目前圈數的圓環前端 -->
+						</svg> <!-- 結束第二組 SVG 圓環 -->
+						<p class="stopwatch-time">00:00</p> <!-- 顯示第二組碼表時間 -->
+					</div></div> <!-- 結束第二組名稱與圓環 -->
+					<button class="start-button stopwatch-toggle" type="button" data-group-id="2" aria-pressed="false">開始</button> <!-- 單獨開始或暫停第二組碼表 -->
+				</article> <!-- 結束第二組碼表卡片 -->
+				<article class="stopwatch-card" data-group-id="3" data-group-color="#606c38"> <!-- 建立第三組綠色碼表卡片 -->
+					<div><h2>第三組</h2><div class="stopwatch-clock"> <!-- 放置第三組的專屬碼表圓環 -->
+						<svg class="stopwatch-progress-ring" viewBox="0 0 180 180" aria-hidden="true"> <!-- 繪製第三組的 SVG 圓環 -->
+							<defs><linearGradient id="stopwatchGradient3" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#f3f6f1"/><stop offset="100%" stop-color="#606c38"/></linearGradient></defs> <!-- 定義由背景色漸變至第三組綠色的圓環 -->
+							<circle class="stopwatch-ring-track" cx="90" cy="90" r="78"/> <!-- 顯示第三組尚未填滿的圓環底軌 -->
+							<circle class="stopwatch-progress" style="stroke:url(#stopwatchGradient3)" cx="90" cy="90" r="78"/> <!-- 顯示第三組綠色漸層進度 -->
+							<circle class="stopwatch-progress-head" cx="90" cy="12" r="5" fill="#606c38" opacity="0"/> <!-- 標示第三組目前圈數的圓環前端 -->
+						</svg> <!-- 結束第三組 SVG 圓環 -->
+						<p class="stopwatch-time">00:00</p> <!-- 顯示第三組碼表時間 -->
+					</div></div> <!-- 結束第三組名稱與圓環 -->
+					<button class="start-button stopwatch-toggle" type="button" data-group-id="3" aria-pressed="false">開始</button> <!-- 單獨開始或暫停第三組碼表 -->
+				</article> <!-- 結束第三組碼表卡片 -->
+				<article class="stopwatch-card" data-group-id="4" data-group-color="#669bbc"> <!-- 建立第四組藍色碼表卡片 -->
+					<div><h2>第四組</h2><div class="stopwatch-clock"> <!-- 放置第四組的專屬碼表圓環 -->
+						<svg class="stopwatch-progress-ring" viewBox="0 0 180 180" aria-hidden="true"> <!-- 繪製第四組的 SVG 圓環 -->
+							<defs><linearGradient id="stopwatchGradient4" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#f3f6f1"/><stop offset="100%" stop-color="#669bbc"/></linearGradient></defs> <!-- 定義由背景色漸變至第四組藍色的圓環 -->
+							<circle class="stopwatch-ring-track" cx="90" cy="90" r="78"/> <!-- 顯示第四組尚未填滿的圓環底軌 -->
+							<circle class="stopwatch-progress" style="stroke:url(#stopwatchGradient4)" cx="90" cy="90" r="78"/> <!-- 顯示第四組藍色漸層進度 -->
+							<circle class="stopwatch-progress-head" cx="90" cy="12" r="5" fill="#669bbc" opacity="0"/> <!-- 標示第四組目前圈數的圓環前端 -->
+						</svg> <!-- 結束第四組 SVG 圓環 -->
+						<p class="stopwatch-time">00:00</p> <!-- 顯示第四組碼表時間 -->
+					</div></div> <!-- 結束第四組名稱與圓環 -->
+					<button class="start-button stopwatch-toggle" type="button" data-group-id="4" aria-pressed="false">開始</button> <!-- 單獨開始或暫停第四組碼表 -->
+				</article> <!-- 結束第四組碼表卡片 -->
+				<article class="stopwatch-card" data-group-id="5" data-group-color="#a06cd5"> <!-- 建立第五組紫色碼表卡片 -->
+					<div><h2>第五組</h2><div class="stopwatch-clock"> <!-- 放置第五組的專屬碼表圓環 -->
+						<svg class="stopwatch-progress-ring" viewBox="0 0 180 180" aria-hidden="true"> <!-- 繪製第五組的 SVG 圓環 -->
+							<defs><linearGradient id="stopwatchGradient5" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#f3f6f1"/><stop offset="100%" stop-color="#a06cd5"/></linearGradient></defs> <!-- 定義由背景色漸變至第五組紫色的圓環 -->
+							<circle class="stopwatch-ring-track" cx="90" cy="90" r="78"/> <!-- 顯示第五組尚未填滿的圓環底軌 -->
+							<circle class="stopwatch-progress" style="stroke:url(#stopwatchGradient5)" cx="90" cy="90" r="78"/> <!-- 顯示第五組紫色漸層進度 -->
+							<circle class="stopwatch-progress-head" cx="90" cy="12" r="5" fill="#a06cd5" opacity="0"/> <!-- 標示第五組目前圈數的圓環前端 -->
+						</svg> <!-- 結束第五組 SVG 圓環 -->
+						<p class="stopwatch-time">00:00</p> <!-- 顯示第五組碼表時間 -->
+					</div></div> <!-- 結束第五組名稱與圓環 -->
+					<button class="start-button stopwatch-toggle" type="button" data-group-id="5" aria-pressed="false">開始</button> <!-- 單獨開始或暫停第五組碼表 -->
+				</article> <!-- 結束第五組碼表卡片 -->
+			</div> <!-- 結束五組碼表卡片清單 -->
+		</main> <!-- 結束小組碼表分頁內容 -->
+	</div> <!-- 結束應用程式外框 -->
+	<audio id="alarmAudio" src="libraries/計時器.mp3" preload="auto" hidden></audio> <!-- 載入時間到時播放的本機鬧鈴音檔 -->
+	<script> // 開始撰寫倒數與按鈕互動程式
+		const minuteInput = document.querySelector("#minutes"); // 取得分鐘輸入欄位
+		const secondInput = document.querySelector("#seconds"); // 取得秒數輸入欄位
+		const startButton = document.querySelector("#startButton"); // 取得開始與暫停按鈕
+		const resetButton = document.querySelector("#resetButton"); // 取得重設按鈕
+		const fullscreenButton = document.querySelector("#fullscreenButton"); // 取得全螢幕切換按鈕
+		const timeDisplay = document.querySelector("#timeDisplay"); // 取得顯示剩餘時間的文字
+		const timeCaption = document.querySelector("#timeCaption"); // 取得時間下方的狀態提示
+		const timerPanel = document.querySelector("#timerPanel"); // 取得控制警示色與閃爍的計時區
+		const progressRing = document.querySelector("#progressRing"); // 取得 SVG 圓環進度線
+		const alarmAudio = document.querySelector("#alarmAudio"); // 取得時間到時使用的本機音檔
+		const countdownTab = document.querySelector("#countdownTab"); // 取得倒數計時分頁按鈕
+		const stopwatchTab = document.querySelector("#stopwatchTab"); // 取得小組碼表分頁按鈕
+		const countdownPanel = document.querySelector("#countdownPanel"); // 取得倒數計時分頁內容
+		const stopwatchPanel = document.querySelector("#stopwatchPanel"); // 取得小組碼表分頁內容
+		const timerTabBar = document.querySelector(".tab-bar"); // 取得計時模式分頁列
+		const allStopwatchesButton = document.querySelector("#allStopwatchesButton"); // 取得全部開始與全部暫停按鈕
+		const resetAllStopwatchesButton = document.querySelector("#resetAllStopwatchesButton"); // 取得全部重置按鈕
+		const stopwatchGroups = [...document.querySelectorAll(".stopwatch-card")].map((card) => ({ // 從五張卡片建立各組獨立狀態
+			id: Number(card.dataset.groupId), // 記錄小組編號
+			elapsedMilliseconds: 0, // 保存已累積的碼表毫秒數
+			startedAt: 0, // 保存本次開始時的時間戳記
+			interval: null, // 保存本組畫面更新計時器
+			isRunning: false, // 記錄本組碼表是否正在運作
+			color: card.dataset.groupColor, // 保存本組前端標記使用的深色
+			timeElement: card.querySelector(".stopwatch-time"), // 取得本組時間文字
+			progressElement: card.querySelector(".stopwatch-progress"), // 取得本組 SVG 圓環進度線
+			progressHeadElement: card.querySelector(".stopwatch-progress-head"), // 取得本組移動中的圓環前端
+			toggleButton: card.querySelector(".stopwatch-toggle") // 取得本組開始與暫停按鈕
+		})); // 結束建立五組碼表狀態
+		const presetButtons = [...document.querySelectorAll(".preset")]; // 收集所有快速設定按鈕
+		const ringCircumference = 2 * Math.PI * 153; // 依圓環半徑計算 SVG 圓周長
+		const stopwatchRingCircumference = 2 * Math.PI * 78; // 依碼表圓環半徑計算每分鐘進度圓周長
+		let remainingSeconds = 300; // 記錄目前剩餘秒數並以五分鐘作為初始值
+		let configuredSeconds = 300; // 記錄按下開始時要採用的原始秒數
+		let deadline = 0; // 記錄倒數結束時的時間戳記
+		let timerInterval = null; // 保存定時更新用的計時器識別值
+		let isRunning = false; // 記錄目前是否正在倒數
+		let isFinished = false; // 記錄倒數是否已經結束
+		let alarmStopTimeout = null; // 保存兩秒後停止鬧鈴的計時器
+		progressRing.style.strokeDasharray = String(ringCircumference); // 設定 SVG 圓環的完整描邊長度
+		progressRing.style.strokeDashoffset = "0"; // 初始顯示完整的圓環進度
+		function formatTime(totalSeconds) { // 將秒數格式化為 MM:SS
+			const minutes = Math.floor(totalSeconds / 60); // 計算剩餘的完整分鐘數
+			const seconds = totalSeconds % 60; // 計算剩餘的秒數
+			return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`; // 使用至少兩位數顯示時間
+		} // 結束時間格式化函式
+		function formatStopwatchTime(totalMilliseconds) { // 將碼表毫秒數格式化為 MM:SS
+			return formatTime(Math.floor(totalMilliseconds / 1000)); // 捨去未滿一秒的部分並沿用共用時間格式
+		} // 結束碼表時間格式化函式
+		function getStopwatchElapsed(group) { // 取得本組累積的實際經過時間
+			return group.elapsedMilliseconds + (group.isRunning ? Date.now() - group.startedAt : 0); // 以時間戳計算避免背景分頁延遲影響碼表
+		} // 結束計算碼表經過時間函式
+		function renderStopwatchGroup(group) { // 更新指定小組的時間與操作按鈕
+			const elapsedMilliseconds = getStopwatchElapsed(group); // 取得本組目前累積的碼表時間
+			group.timeElement.textContent = formatStopwatchTime(elapsedMilliseconds); // 顯示本組目前經過時間
+			const minuteProgress = (elapsedMilliseconds % 60000) / 60000; // 計算目前圈數內前端標記的位置
+			const completedRings = Math.floor(elapsedMilliseconds / 60000); // 計算已完整完成的圓環圈數
+			const visibleProgress = Math.min(elapsedMilliseconds / 60000, 1); // 首圈填滿後保留完整圓環而不再清空
+			group.progressElement.style.strokeDasharray = String(stopwatchRingCircumference); // 設定本組圓環描邊總長度
+			group.progressElement.style.strokeDashoffset = String(stopwatchRingCircumference * (1 - visibleProgress)); // 逐步填滿首圈並保留已完成的圓環
+			const angle = minuteProgress * 2 * Math.PI; // 計算前端標記沿圓環移動的角度
+			group.progressHeadElement.setAttribute("cx", String(90 + 78 * Math.cos(angle))); // 更新前端標記的水平位置
+			group.progressHeadElement.setAttribute("cy", String(90 + 78 * Math.sin(angle))); // 更新前端標記的垂直位置
+			const isOddLap = completedRings % 2 === 0; // 判斷目前進行中的圈數是否為單數圈
+			group.progressHeadElement.setAttribute("fill", isOddLap ? group.color : "#f3f6f1"); // 單數圈用最深色，雙數圈用最淺底色
+			group.progressHeadElement.setAttribute("opacity", String(elapsedMilliseconds > 0 ? 1 : 0)); // 開始計時後顯示移動中的前端標記
+			group.toggleButton.textContent = group.isRunning ? "暫停" : "開始"; // 依本組狀態切換開始與暫停文字
+			group.toggleButton.setAttribute("aria-pressed", String(group.isRunning)); // 將本組運作狀態提供給輔助工具
+		} // 結束更新單組碼表函式
+		function syncAllStopwatchesButton() { // 依五組碼表狀態同步全部控制按鈕
+			const hasRunningGroup = stopwatchGroups.some((group) => group.isRunning); // 檢查是否至少有一組正在計時
+			allStopwatchesButton.textContent = hasRunningGroup ? "全部暫停" : "全部開始"; // 有任何一組運作時提供全部暫停操作
+			allStopwatchesButton.setAttribute("aria-pressed", String(hasRunningGroup)); // 將全部控制狀態提供給輔助工具
+		} // 結束同步全部碼表按鈕函式
+		function startStopwatchGroup(group) { // 開始指定小組的碼表
+			if (group.isRunning) return; // 避免對已運作中的碼表重複啟動
+			group.startedAt = Date.now(); // 記錄本次開始時間以精確計算經過時間
+			group.isRunning = true; // 標記本組正在運作
+			group.interval = window.setInterval(() => renderStopwatchGroup(group), 100); // 定期刷新顯示並以時間戳補償背景延遲
+			renderStopwatchGroup(group); // 立即刷新本組時間與按鈕
+			syncAllStopwatchesButton(); // 同步全部控制按鈕文字
+		} // 結束開始單組碼表函式
+		function pauseStopwatchGroup(group) { // 暫停指定小組並保存累積時間
+			if (!group.isRunning) return; // 忽略已暫停的碼表
+			group.elapsedMilliseconds += Date.now() - group.startedAt; // 將本次運作時間累加至已經過時間
+			window.clearInterval(group.interval); // 停止本組畫面更新計時器
+			group.interval = null; // 清除本組計時器識別值
+			group.isRunning = false; // 標記本組已暫停
+			renderStopwatchGroup(group); // 顯示暫停時的累積時間與按鈕
+			syncAllStopwatchesButton(); // 同步全部控制按鈕文字
+		} // 結束暫停單組碼表函式
+		function toggleStopwatchGroup(groupId) { // 切換指定小組的開始或暫停狀態
+			const group = stopwatchGroups.find((item) => item.id === groupId); // 依小組編號取得對應的碼表狀態
+			if (!group) return; // 找不到小組時不執行操作
+			if (group.isRunning) pauseStopwatchGroup(group); // 運作中則暫停本組
+			else startStopwatchGroup(group); // 已暫停則繼續本組
+		} // 結束切換單組碼表函式
+		function toggleAllStopwatches() { // 同時開始或暫停所有小組碼表
+			if (stopwatchGroups.some((group) => group.isRunning)) { // 有任一組運作時將所有組別全部暫停
+				stopwatchGroups.forEach(pauseStopwatchGroup); // 逐一保存並暫停每組碼表
+				return; // 完成全部暫停後結束操作
+			} // 結束全部暫停判斷
+			stopwatchGroups.forEach(startStopwatchGroup); // 所有組別皆暫停時同時開始全部碼表
+		} // 結束全部開始與暫停函式
+		function resetAllStopwatches() { // 將所有小組碼表停止並歸零
+			stopwatchGroups.forEach((group) => { // 逐一重置每組碼表
+				if (group.interval !== null) window.clearInterval(group.interval); // 清除本組畫面更新計時器
+				group.elapsedMilliseconds = 0; // 將本組累積時間歸零
+				group.startedAt = 0; // 清除本次開始時間
+				group.interval = null; // 清除本組計時器識別值
+				group.isRunning = false; // 標記本組已停止
+				renderStopwatchGroup(group); // 更新本組為 00:00 與開始按鈕
+			}); // 結束逐組重置
+			syncAllStopwatchesButton(); // 將全部控制按鈕還原為全部開始
+		} // 結束全部重置碼表函式
+		function switchTimerTab(activeTab) { // 切換倒數計時與小組碼表分頁
+			const showCountdown = activeTab === "countdown"; // 判斷目前選擇的分頁
+			countdownPanel.hidden = !showCountdown; // 依選擇顯示或隱藏倒數內容
+			stopwatchPanel.hidden = showCountdown; // 依選擇顯示或隱藏碼表內容
+			countdownTab.setAttribute("aria-selected", String(showCountdown)); // 更新倒數分頁選取狀態
+			countdownTab.tabIndex = showCountdown ? 0 : -1; // 更新倒數分頁的鍵盤焦點順序
+			stopwatchTab.setAttribute("aria-selected", String(!showCountdown)); // 更新碼表分頁選取狀態
+			stopwatchTab.tabIndex = showCountdown ? -1 : 0; // 更新碼表分頁的鍵盤焦點順序
+		} // 結束分頁切換函式
+		function readConfiguredTime() { // 從輸入欄位取得並限制使用者設定的時間
+			const minutes = Math.max(0, Math.min(999, Number.parseInt(minuteInput.value, 10) || 0)); // 將分鐘限制在零至九百九十九
+			const seconds = Math.max(0, Math.min(59, Number.parseInt(secondInput.value, 10) || 0)); // 將秒數限制在零至五十九
+			minuteInput.value = String(minutes); // 將合法化後的分鐘值更新回欄位
+			secondInput.value = String(seconds); // 將合法化後的秒數值更新回欄位
+			return minutes * 60 + seconds; // 回傳設定時間的總秒數
+		} // 結束讀取設定時間函式
+		function renderTimer() { // 更新倒數文字與 SVG 圓環外觀
+			timeDisplay.textContent = formatTime(remainingSeconds); // 顯示目前剩餘時間
+			const progress = configuredSeconds > 0 ? remainingSeconds / configuredSeconds : 0; // 計算剩餘時間所占比例
+			progressRing.style.strokeDashoffset = String(ringCircumference * (1 - progress)); // 讓圓環隨倒數進度逐漸縮短
+			timerPanel.classList.toggle("is-urgent", remainingSeconds <= 10 && remainingSeconds > 0); // 在最後十秒套用紅色閃爍效果
+			timerPanel.classList.toggle("is-finished", isFinished); // 在時間結束後保持警示色
+			document.documentElement.classList.toggle("timer-finished-flash", isFinished); // 依倒數完成狀態啟動或清除全畫面反色提醒
+		} // 結束更新畫面函式
+		function updatePresetSelection(selectedMinutes = null) { // 同步快速按鈕與目前選取的分鐘數
+			const currentMinutes = selectedMinutes ?? Number.parseInt(minuteInput.value, 10); // 讀取指定時間或目前輸入的分鐘
+			const hasSeconds = Number.parseInt(secondInput.value, 10) > 0; // 判斷是否另有設定秒數
+			presetButtons.forEach((button) => { // 逐一更新快速時間按鈕的選取狀態
+				const isSelected = !hasSeconds && Number(button.dataset.minutes) === currentMinutes; // 只有分鐘完全相同且沒有額外秒數才選取
+				button.setAttribute("aria-pressed", String(isSelected)); // 將選取狀態提供給輔助工具
+			}); // 結束快速按鈕狀態更新
+		} // 結束快速按鈕選取函式
+		function setSettingsDisabled(disabled) { // 控制倒數期間是否允許修改設定
+			minuteInput.disabled = disabled; // 依倒數狀態鎖定或開放分鐘欄位
+			secondInput.disabled = disabled; // 依倒數狀態鎖定或開放秒數欄位
+			presetButtons.forEach((button) => { button.disabled = disabled; }); // 依倒數狀態鎖定或開放快速按鈕
+		} // 結束設定鎖定函式
+		function stopInterval() { // 清除目前執行中的畫面更新計時器
+			if (timerInterval !== null) window.clearInterval(timerInterval); // 只有計時器存在時才清除它
+			timerInterval = null; // 將計時器識別值恢復為未設定
+		} // 結束清除計時器函式
+		async function toggleFullscreen() { // 切換頁面的全螢幕顯示狀態
+			try { // 捕捉瀏覽器拒絕全螢幕時的錯誤
+				if (document.fullscreenElement) await document.exitFullscreen(); // 已進入全螢幕時退出全螢幕
+				else await document.documentElement.requestFullscreen(); // 否則將整個頁面切換為全螢幕
+			} catch (error) { // 處理瀏覽器或權限不支援的情況
+				console.error("無法切換全螢幕：", error); // 在開發者主控台記錄切換失敗原因
+			} // 結束錯誤處理
+		} // 結束全螢幕切換函式
+		function syncFullscreenButton() { // 依照實際全螢幕狀態更新按鈕外觀與標籤
+			const isFullscreen = Boolean(document.fullscreenElement); // 判斷頁面目前是否處於全螢幕
+			const label = isFullscreen ? "離開全螢幕" : "進入全螢幕"; // 選擇符合目前狀態的按鈕標籤
+			fullscreenButton.setAttribute("aria-pressed", String(isFullscreen)); // 將全螢幕狀態提供給輔助工具
+			fullscreenButton.setAttribute("aria-label", label); // 更新按鈕的輔助標籤
+			fullscreenButton.title = label; // 更新滑鼠停留時顯示的提示
+		} // 結束同步全螢幕按鈕函式
+		function playAlarm() { // 播放本機鬧鈴音檔並在兩秒後停止
+			if (alarmStopTimeout !== null) window.clearTimeout(alarmStopTimeout); // 避免重複播放時留下舊的停止計時器
+			alarmAudio.pause(); // 停止可能尚未結束的前一次播放
+			alarmAudio.currentTime = 0; // 每次都從音檔開頭開始播放
+			const playback = alarmAudio.play(); // 開始播放 libraries 資料夾內的鬧鈴音檔
+			if (playback !== undefined) playback.catch((error) => console.error("無法播放計時器音檔：", error)); // 在瀏覽器拒絕播放時記錄錯誤
+			alarmStopTimeout = window.setTimeout(() => { // 設定兩秒後停止播放
+				alarmAudio.pause(); // 到達播放上限時停止音檔
+				alarmAudio.currentTime = 0; // 將播放位置歸零以便下次從頭播放
+				alarmStopTimeout = null; // 清除已完成的停止計時器識別值
+			}, 2000); // 將鬧鈴播放時間限制為兩秒
+		} // 結束本機鬧鈴播放函式
+		function finishTimer() { // 處理倒數到零時的完整結束流程
+			stopInterval(); // 停止更新倒數的間隔計時器
+			remainingSeconds = 0; // 將剩餘秒數固定為零
+			isRunning = false; // 標示倒數已停止
+			isFinished = true; // 標示倒數已經完成
+			startButton.textContent = "重新開始"; // 提示可用主要按鈕再次開始完整計時
+			timeCaption.textContent = "時間到！"; // 在大字下方顯示明確的結束訊息
+			setSettingsDisabled(false); // 結束後允許重新調整時間設定
+			renderTimer(); // 更新零秒數字與警示色圓環
+			playAlarm(); // 使用 Web Audio API 播放結束提示音
+		} // 結束處理計時完成函式
+		function tick() { // 依據結束時間戳更新剩餘秒數
+			remainingSeconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000)); // 以絕對時間計算避免背景分頁造成計時誤差
+			renderTimer(); // 更新數字與圓環進度
+			if (remainingSeconds === 0) finishTimer(); // 到達零秒時執行結束流程
+		} // 結束每次倒數更新函式
+		function startTimer() { // 開始新的倒數或從暫停狀態繼續
+			if (remainingSeconds <= 0) remainingSeconds = configuredSeconds; // 從零開始時重新使用目前設定的時間
+			if (remainingSeconds <= 0) { timeCaption.textContent = "請先設定時間"; return; } // 零秒設定時在圓環內提醒先輸入時間
+			isFinished = false; // 清除上一次倒數完成的狀態
+			isRunning = true; // 標記目前正在倒數
+			deadline = Date.now() + remainingSeconds * 1000; // 依剩餘時間計算倒數結束時刻
+			startButton.textContent = "暫停"; // 讓開始按鈕在倒數期間改為暫停
+			timeCaption.textContent = "討論進行中"; // 顯示小組討論正在計時
+			setSettingsDisabled(true); // 倒數期間鎖定時間設定避免數字與進度不同步
+			stopInterval(); // 避免重複啟動多個更新計時器
+			tick(); // 立即更新畫面而不等待第一個計時週期
+			if (isRunning) timerInterval = window.setInterval(tick, 100); // 每 100 毫秒同步一次時間與進度
+		} // 結束開始倒數函式
+		function pauseTimer() { // 暫停倒數並保留當下剩餘時間
+			if (!isRunning) return; // 只有運作中才能執行暫停
+			tick(); // 先依時間戳記取得最準確的剩餘時間
+			if (!isRunning) return; // 若剛好倒數結束則不覆蓋完成狀態
+			stopInterval(); // 停止畫面更新計時器
+			isRunning = false; // 標記目前處於暫停狀態
+			startButton.textContent = "繼續"; // 將主要按鈕改為繼續倒數
+			timeCaption.textContent = "已暫停"; // 在倒數數字下方標示暫停狀態
+			setSettingsDisabled(false); // 暫停時允許調整設定或重新設定
+		} // 結束暫停倒數函式
+		function resetTimer() { // 重設計時器並回到目前輸入的時間
+			stopInterval(); // 清除倒數更新計時器
+			isRunning = false; // 清除運作中狀態
+			isFinished = false; // 清除時間到的狀態
+			configuredSeconds = readConfiguredTime(); // 重新讀取並保存目前設定時間
+			remainingSeconds = configuredSeconds; // 將剩餘時間還原到設定的完整時間
+			startButton.textContent = "開始"; // 將主要按鈕恢復為開始
+			timeCaption.textContent = "等待開始"; // 清除暫停或結束提示
+			setSettingsDisabled(false); // 允許重新設定時間
+			updatePresetSelection(); // 同步顯示目前對應的快速選項
+			renderTimer(); // 更新重設後的數字與圓環
+		} // 結束重設計時器函式
+		countdownTab.addEventListener("click", () => switchTimerTab("countdown")); // 點擊分頁時顯示倒數計時器
+		stopwatchTab.addEventListener("click", () => switchTimerTab("stopwatch")); // 點擊分頁時顯示小組碼表
+		timerTabBar.addEventListener("keydown", (event) => { // 支援使用方向鍵切換計時模式分頁
+			const timerTabs = [countdownTab, stopwatchTab]; // 建立可用方向鍵輪替的分頁清單
+			const currentIndex = timerTabs.indexOf(event.target); // 取得目前鍵盤焦點所在分頁
+			if (currentIndex < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; // 忽略非分頁焦點與其他按鍵
+			event.preventDefault(); // 避免方向鍵捲動頁面
+			const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? timerTabs.length - 1 : (currentIndex + (event.key === "ArrowRight" ? 1 : timerTabs.length - 1)) % timerTabs.length; // 計算下一個分頁位置
+			timerTabs[nextIndex].focus(); // 將鍵盤焦點移至下一個分頁
+			timerTabs[nextIndex].click(); // 同步切換至取得焦點的分頁
+		}); // 結束分頁方向鍵操作
+		allStopwatchesButton.addEventListener("click", toggleAllStopwatches); // 執行全部開始或全部暫停
+		resetAllStopwatchesButton.addEventListener("click", resetAllStopwatches); // 將全部小組碼表歸零
+		stopwatchGrid.addEventListener("click", (event) => { // 透過事件委派處理各組獨立按鈕
+			const toggleButton = event.target.closest(".stopwatch-toggle"); // 找出被點擊的小組開始／暫停按鈕
+			if (toggleButton) toggleStopwatchGroup(Number(toggleButton.dataset.groupId)); // 只切換指定小組的碼表
+		}); // 結束小組卡片按鈕事件
+		stopwatchGroups.forEach(renderStopwatchGroup); // 初始化五組碼表的時間與按鈕
+		syncAllStopwatchesButton(); // 初始化全部控制按鈕文字
+		startButton.addEventListener("click", () => { // 依按鈕目前狀態切換開始、暫停或重新開始
+			if (isRunning) { pauseTimer(); return; } // 倒數中點擊時立即暫停
+			if (isFinished) resetTimer(); // 時間到後先恢復完整時間再重新開始
+			startTimer(); // 開始倒數或從暫停位置繼續
+		}); // 結束開始按鈕的互動綁定
+		resetButton.addEventListener("click", resetTimer); // 點擊重設圖示時恢復所設定的完整時間
+		fullscreenButton.addEventListener("click", toggleFullscreen); // 點擊全螢幕圖示時切換顯示狀態
+		document.addEventListener("fullscreenchange", syncFullscreenButton); // 確保使用瀏覽器快捷鍵退出時按鈕狀態同步
+		document.addEventListener("keydown", (event) => { // 依目前分頁綁定空白鍵操作與 R 鍵重設快捷鍵
+			const target = event.target; // 取得目前接收鍵盤輸入的元素
+			if (event.repeat || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable) return; // 避免連按或在文字輸入時觸發快捷鍵
+			if (event.code === "Space" && !(target instanceof HTMLButtonElement)) { // 在非按鈕焦點時以空白鍵切換計時
+				event.preventDefault(); // 避免空白鍵讓頁面向下捲動
+				if (stopwatchPanel.hidden) startButton.click(); // 倒數分頁時重用倒數開始／暫停流程
+				else toggleAllStopwatches(); // 碼表分頁時切換全部小組碼表
+			} else if (event.key.toLowerCase() === "r") { // 按下 R 鍵時重設計時器
+				event.preventDefault(); // 避免瀏覽器將快捷鍵解讀成其他操作
+				if (stopwatchPanel.hidden) resetTimer(); // 倒數分頁時重設倒數計時器
+				else resetAllStopwatches(); // 碼表分頁時重設所有小組碼表
+			} // 結束快捷鍵分流
+		}); // 結束鍵盤快捷鍵綁定
+		presetButtons.forEach((button) => { // 為每個快速時間選項綁定點擊事件
+			button.addEventListener("click", () => { // 點擊快速設定後更新輸入欄位與畫面
+				minuteInput.value = button.dataset.minutes; // 將選取分鐘寫入分鐘輸入欄
+				secondInput.value = "0"; // 快速設定時將秒數歸零
+				configuredSeconds = readConfiguredTime(); // 更新這次倒數採用的完整時間
+				remainingSeconds = configuredSeconds; // 立即更新畫面上的剩餘時間
+				isFinished = false; // 清除先前的時間結束狀態
+				startButton.textContent = "開始"; // 將按鈕還原為開始狀態
+				timeCaption.textContent = "等待開始"; // 將提示還原為等待開始
+				updatePresetSelection(Number(button.dataset.minutes)); // 標示目前選中的快速設定
+				renderTimer(); // 顯示快速設定後的完整時間
+			}); // 結束單一快速按鈕事件
+		}); // 結束快速按鈕事件綁定
+		[minuteInput, secondInput].forEach((input) => { // 監聽手動輸入分鐘與秒數的變化
+			input.addEventListener("input", () => { // 輸入時間時即時同步計時畫面
+				configuredSeconds = readConfiguredTime(); // 更新目前設定的總秒數
+				remainingSeconds = configuredSeconds; // 讓畫面預覽目前設定的時間
+				isFinished = false; // 修改時間後清除舊的完成狀態
+				startButton.textContent = "開始"; // 確保下一次操作為開始倒數
+				timeCaption.textContent = "等待開始"; // 將提示文字還原為待命狀態
+				updatePresetSelection(); // 對照分鐘與秒數更新快速選項標記
+				renderTimer(); // 立即顯示新設定的時間與圓環
+			}); // 結束單一時間欄位輸入事件
+		}); // 結束分鐘與秒數欄位事件綁定
+		configuredSeconds = readConfiguredTime(); // 依 HTML 預設值初始化完整設定時間
+		remainingSeconds = configuredSeconds; // 依 HTML 預設值初始化剩餘時間
+		updatePresetSelection(); // 初始化快速設定按鈕的選取外觀
+		renderTimer(); // 首次載入時顯示預設時間與完整圓環
+	</script> <!-- 結束倒數計時程式 -->
+</body> <!-- 結束頁面內容 -->
+</html> <!-- 結束 HTML 文件 -->
